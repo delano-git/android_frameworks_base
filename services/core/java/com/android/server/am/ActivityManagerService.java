@@ -10762,6 +10762,14 @@ public class ActivityManagerService extends IActivityManager.Stub
                         "-------------------------------------------------------------------------------");
             }
             mComponentAliasResolver.dump(pw);
+            IAxDragonite dragonite = LocalServices.getService(IAxDragonite.class);
+            if (dragonite != null) {
+                pw.println();
+                pw.println(
+                        "-------------------------------------------------------------------------------");
+                pw.println("DRAGONITE STATE (dumpsys activity dragonite):");
+                dragonite.dump(fd, pw, EMPTY_STRING_ARRAY);
+            }
         }
     }
 
@@ -11148,6 +11156,17 @@ public class ActivityManagerService extends IActivityManager.Stub
                 mProcessList.mAppExitInfoTracker.dumpHistoryProcessExitInfo(pw, dumpPackage);
             } else if ("component-alias".equals(cmd)) {
                 mComponentAliasResolver.dump(pw);
+            } else if ("dragonite".equals(cmd) || "ax_dragonite".equals(cmd)) {
+                IAxDragonite dragonite = LocalServices.getService(IAxDragonite.class);
+                if (dragonite != null) {
+                    String[] newArgs = new String[args.length - opti];
+                    if (newArgs.length > 0) {
+                        System.arraycopy(args, opti, newArgs, 0, newArgs.length);
+                    }
+                    dragonite.dump(fd, pw, newArgs);
+                } else {
+                    pw.println("AxDragonite service is not available.");
+                }
             } else {
                 // Dumping a single activity?
                 if (!mAtmInternal.dumpActivity(fd, pw, cmd, args, opti, dumpAll,
