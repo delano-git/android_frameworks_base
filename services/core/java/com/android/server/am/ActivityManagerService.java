@@ -10762,14 +10762,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                         "-------------------------------------------------------------------------------");
             }
             mComponentAliasResolver.dump(pw);
-            IAxDragonite dragonite = LocalServices.getService(IAxDragonite.class);
-            if (dragonite != null) {
-                pw.println();
-                pw.println(
-                        "-------------------------------------------------------------------------------");
-                pw.println("DRAGONITE STATE (dumpsys activity dragonite):");
-                dragonite.dump(fd, pw, EMPTY_STRING_ARRAY);
-            }
         }
     }
 
@@ -11207,6 +11199,16 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
             if (dumpAll) {
                 dumpAppRestrictionController(pw);
+            }
+            if (dumpPackage == null) {
+                IAxDragonite dragonite = LocalServices.getService(IAxDragonite.class);
+                if (dragonite != null) {
+                    pw.println();
+                    pw.println(
+                            "-------------------------------------------------------------------------------");
+                    pw.println("DRAGONITE STATE (dumpsys activity dragonite):");
+                    dragonite.dump(fd, pw, EMPTY_STRING_ARRAY);
+                }
             }
         }
         Binder.restoreCallingIdentity(origId);
