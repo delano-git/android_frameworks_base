@@ -110,6 +110,7 @@ import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.IndentingPrintWriter;
+import android.util.IntArray;
 import android.util.Log;
 import android.util.Slog;
 import android.util.SparseArray;
@@ -2485,27 +2486,34 @@ public class InputManagerService extends IInputManager.Stub
         synchronized (mInputDevicesLock) {
             devices = mInputDevices;
         }
+        final IntArray reenable = new IntArray();
         synchronized (mInputDevicesLock) {
             for (int i = mSuppressedBluetoothPointers.size() - 1; i >= 0; i--) {
                 final int trackedId = mSuppressedBluetoothPointers.keyAt(i);
-                boolean stillPresent = false;
+                InputDevice tracked = null;
                 for (InputDevice device : devices) {
                     if (device.getId() == trackedId) {
-                        stillPresent = true;
+                        tracked = device;
                         break;
                     }
                 }
-                if (!stillPresent) {
+                if (tracked == null) {
                     mSuppressedBluetoothPointers.removeAt(i);
+                } else if (!isPointerOnly(tracked)) {
+                    // Composite devices like styluses register their mouse node first and their
+                    // keyboard or stylus nodes into the same device right after, so the device
+                    // was only a pointer when it got suppressed.
+                    mSuppressedBluetoothPointers.removeAt(i);
+                    reenable.add(trackedId);
                 }
             }
         }
+        for (int i = 0; i < reenable.size(); i++) {
+            mNative.enableInputDevice(reenable.get(i));
+        }
         for (InputDevice device : devices) {
             final int id = device.getId();
-            if ((device.getSources() & InputDevice.SOURCE_MOUSE) != InputDevice.SOURCE_MOUSE) {
-                continue;
-            }
-            if ((device.getSources() & InputDevice.SOURCE_KEYBOARD) == InputDevice.SOURCE_KEYBOARD) {
+            if (!isPointerOnly(device)) {
                 continue;
             }
             final String btAddress = mNative.getBluetoothAddress(id);
@@ -2523,6 +2531,13 @@ public class InputManagerService extends IInputManager.Stub
             }
             mNative.disableInputDevice(id);
         }
+    }
+
+    private static boolean isPointerOnly(InputDevice device) {
+        final int sources = device.getSources();
+        return (sources & InputDevice.SOURCE_MOUSE) == InputDevice.SOURCE_MOUSE
+                && (sources & InputDevice.SOURCE_KEYBOARD) != InputDevice.SOURCE_KEYBOARD
+                && (sources & InputDevice.SOURCE_STYLUS) != InputDevice.SOURCE_STYLUS;
     }
 
     private boolean isLikelyRealBluetoothPointer(String btAddress) {
