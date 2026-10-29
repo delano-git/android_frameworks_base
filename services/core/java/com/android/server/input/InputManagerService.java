@@ -2499,10 +2499,12 @@ public class InputManagerService extends IInputManager.Stub
                 }
                 if (tracked == null) {
                     mSuppressedBluetoothPointers.removeAt(i);
-                } else if (!isPointerOnly(tracked)) {
+                } else if (!isPointerOnly(tracked)
+                        || hasKeyboardSibling(devices, tracked)) {
                     // Composite devices like styluses register their mouse node first and their
                     // keyboard or stylus nodes into the same device right after, so the device
-                    // was only a pointer when it got suppressed.
+                    // was only a pointer when it got suppressed. Keyboards with a trackpad
+                    // expose the pointer as its own device next to the keyboard.
                     mSuppressedBluetoothPointers.removeAt(i);
                     reenable.add(trackedId);
                 }
@@ -2520,7 +2522,7 @@ public class InputManagerService extends IInputManager.Stub
             if (btAddress == null) {
                 continue;
             }
-            if (isLikelyRealBluetoothPointer(btAddress)) {
+            if (isLikelyRealBluetoothPointer(btAddress) || hasKeyboardSibling(devices, device)) {
                 continue;
             }
             synchronized (mInputDevicesLock) {
@@ -2538,6 +2540,24 @@ public class InputManagerService extends IInputManager.Stub
         return (sources & InputDevice.SOURCE_MOUSE) == InputDevice.SOURCE_MOUSE
                 && (sources & InputDevice.SOURCE_KEYBOARD) != InputDevice.SOURCE_KEYBOARD
                 && (sources & InputDevice.SOURCE_STYLUS) != InputDevice.SOURCE_STYLUS;
+    }
+
+    private boolean hasKeyboardSibling(InputDevice[] devices, InputDevice pointer) {
+        final String btAddress = mNative.getBluetoothAddress(pointer.getId());
+        if (btAddress == null) {
+            return false;
+        }
+        for (InputDevice other : devices) {
+            if (other.getId() == pointer.getId()
+                    || (other.getSources() & InputDevice.SOURCE_KEYBOARD)
+                            != InputDevice.SOURCE_KEYBOARD) {
+                continue;
+            }
+            if (btAddress.equals(mNative.getBluetoothAddress(other.getId()))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean isLikelyRealBluetoothPointer(String btAddress) {
