@@ -1218,7 +1218,8 @@ final class KeyGestureController {
                 }
                 break;
             case KeyEvent.KEYCODE_SYSRQ:
-                if (firstDown) {
+                // A pen squeeze is reported as SYSRQ, so leave it to the app in front
+                if (firstDown && !isStylus(deviceId)) {
                     handleKeyGesture(deviceId, new int[]{keyCode}, /* modifierState = */0,
                             KeyGestureEvent.KEY_GESTURE_TYPE_TAKE_SCREENSHOT,
                             KeyGestureEvent.ACTION_GESTURE_COMPLETE, displayId,
@@ -1737,6 +1738,11 @@ final class KeyGestureController {
         public void onChange(boolean selfChange) {
             initBehaviorsFromSettings();
         }
+    }
+
+    private boolean isStylus(int deviceId) {
+        final InputDevice device = getInputDevice(deviceId);
+        return device != null && device.supportsSource(InputDevice.SOURCE_STYLUS);
     }
 
     @Nullable
