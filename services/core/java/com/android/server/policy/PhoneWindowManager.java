@@ -3308,6 +3308,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             if (pressCount != 1) {
                 return;
             }
+            // The Focus Pen Pro reports a double tap as the tail button, so leave it to the app
+            final InputDevice device = event.getDevice();
+            if (device != null && device.supportsSource(InputDevice.SOURCE_STYLUS)) {
+                return;
+            }
             // Single press on tail button triggers the open notes gesture.
             mInputManagerInternal.handleKeyGestureInKeyGestureController(
                     new KeyGestureEvent.Builder()
