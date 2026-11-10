@@ -2823,10 +2823,52 @@ public class InputManagerService extends IInputManager.Stub
         }
     }
 
+    /**
+     * The Xiaomi Bluetooth pens stream their pressure report on the keyboard usage page, and the
+     * generic HID driver turns every one of those reports into a keypad key press. These are the
+     * same keys the hid-xiaomi kernel driver filters.
+     */
+    private boolean isXiaomiPenPhantomKey(KeyEvent event) {
+        switch (event.getScanCode()) {
+            case 13: // KEY_EQUAL
+            case 78: // KEY_KPPLUS
+            case 117: // KEY_KPEQUAL
+                break;
+            default:
+                return false;
+        }
+        final int deviceId = event.getDeviceId();
+        synchronized (mInputDevicesLock) {
+            for (InputDevice device : mInputDevices) {
+                if (device.getId() != deviceId) {
+                    continue;
+                }
+                if (device.getVendorId() != 0x0022) {
+                    return false;
+                }
+                switch (device.getProductId()) {
+                    case 0x3280: // POCO Focus Pen
+                    case 0x3281:
+                    case 0x4d80: // Focus Pen
+                    case 0x4d81:
+                    case 0x5081: // Focus Pen Pro
+                        return true;
+                    default:
+                        return false;
+                }
+            }
+        }
+        return false;
+    }
+
     // Native callback.
     @SuppressWarnings("unused")
     @VisibleForTesting
     public int interceptKeyBeforeQueueing(KeyEvent event, int policyFlags) {
+        if (isXiaomiPenPhantomKey(event)) {
+            // Not passed to the user, so the dispatcher drops it.
+            return 0;
+        }
         notifyKeyActivityListeners(event);
         synchronized (mFocusEventDebugViewLock) {
             if (mFocusEventDebugView != null) {
