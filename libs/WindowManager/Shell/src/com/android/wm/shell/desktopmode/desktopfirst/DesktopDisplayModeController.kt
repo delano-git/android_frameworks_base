@@ -31,6 +31,7 @@ import android.util.IndentingPrintWriter
 import android.view.Display.DEFAULT_DISPLAY
 import android.view.IWindowManager
 import android.view.InputDevice
+import android.view.KeyEvent
 import android.view.WindowManager.TRANSIT_CHANGE
 import android.window.DesktopExperienceFlags
 import android.window.WindowContainerTransaction
@@ -286,9 +287,18 @@ class DesktopDisplayModeController(
     private fun hasAnyPhysicalKeyboardDevice() =
         inputManager.inputDeviceIds.any { deviceId ->
             inputManager.getInputDevice(deviceId)?.let { device ->
-                !device.isVirtual() && device.isFullKeyboard() && device.isEnabled()
+                !device.isVirtual() &&
+                    (device.isFullKeyboard() || isKeyboardWithTouchpad(device)) &&
+                    device.isEnabled()
             } ?: false
         }
+
+    // A keyboard cover with a touchpad can be a single device, which is classified as a
+    // non-alphabetic keyboard until a letter is typed on it. Count it when it has letter keys.
+    private fun isKeyboardWithTouchpad(device: InputDevice) =
+        device.supportsSource(InputDevice.SOURCE_KEYBOARD) &&
+            device.supportsSource(InputDevice.SOURCE_TOUCHPAD) &&
+            device.hasKeys(KeyEvent.KEYCODE_Q, KeyEvent.KEYCODE_A, KeyEvent.KEYCODE_Z).all { it }
 
     private fun isDefaultDisplayDesktopEligible(): Boolean {
         return desktopState.isDesktopModeSupportedOnDisplay(DEFAULT_DISPLAY)
