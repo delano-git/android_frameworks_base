@@ -413,6 +413,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     static final int TRIPLE_PRESS_PRIMARY_NOTHING = 0;
     static final int TRIPLE_PRESS_PRIMARY_TOGGLE_ACCESSIBILITY = 1;
 
+    // Settings.Secure key of the device settings that ignores a closed smart cover
+    private static final String IGNORE_SMART_COVER = "ignore_smart_cover";
+
     static public final String SYSTEM_DIALOG_REASON_KEY = "reason";
     static public final String SYSTEM_DIALOG_REASON_GLOBAL_ACTIONS = "globalactions";
     static public final String SYSTEM_DIALOG_REASON_RECENT_APPS = "recentapps";
@@ -4972,6 +4975,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     /** {@inheritDoc} */
     @Override
     public void notifyLidSwitchChanged(long whenNanos, boolean lidOpen) {
+        // a cover that is closed can be set to be ignored, the screen then stays as it is
+        if (!lidOpen && Settings.Secure.getIntForUser(mContext.getContentResolver(),
+                IGNORE_SMART_COVER, 0, UserHandle.USER_CURRENT) != 0) {
+            return;
+        }
+
         // lid changed state
         final int newLidState = lidOpen ? LID_OPEN : LID_CLOSED;
         if (newLidState == mDefaultDisplayPolicy.getLidState()) {
