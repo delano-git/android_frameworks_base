@@ -21,6 +21,7 @@ import android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN
 import android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED
 import android.app.WindowConfiguration.windowingModeToString
 import android.content.Context
+import android.database.ContentObserver
 import android.hardware.input.InputManager
 import android.os.Handler
 import android.os.SystemProperties
@@ -88,10 +89,22 @@ class DesktopDisplayModeController(
             }
         }
 
+    private val desktopOnKeyboardObserver =
+        object : ContentObserver(mainHandler) {
+            override fun onChange(selfChange: Boolean) {
+                updateDefaultDisplayWindowingMode()
+            }
+        }
+
     init {
         shellInit.addInitCallback({ shellCommandHandler.addDumpCallback(this::dump, this) }, this)
         if (DesktopExperienceFlags.FORM_FACTOR_BASED_DESKTOP_FIRST_SWITCH.isTrue) {
             inputManager.registerInputDeviceListener(inputDeviceListener, mainHandler)
+            context.contentResolver.registerContentObserver(
+                Settings.Secure.getUriFor(DESKTOP_MODE_ON_KEYBOARD),
+                false,
+                desktopOnKeyboardObserver,
+            )
         }
     }
 
@@ -210,7 +223,11 @@ class DesktopDisplayModeController(
                     hasAnyTouchpadDevice,
                     hasAnyPhysicalKeyboardDevice,
                 )
-                if (hasAnyTouchpadDevice && hasAnyPhysicalKeyboardDevice) {
+                if (
+                    hasAnyTouchpadDevice &&
+                        hasAnyPhysicalKeyboardDevice &&
+                        isDesktopModeOnKeyboardEnabled()
+                ) {
                     return true
                 }
             }
@@ -254,6 +271,10 @@ class DesktopDisplayModeController(
 
     private fun hasExternalDisplay() =
         rootTaskDisplayAreaOrganizer.getDisplayIds().any { it != DEFAULT_DISPLAY }
+
+    // Switching to desktop-first when a keyboard and touchpad are attached is opt-in
+    private fun isDesktopModeOnKeyboardEnabled() =
+        Settings.Secure.getInt(context.contentResolver, DESKTOP_MODE_ON_KEYBOARD, 0) != 0
 
     private fun hasAnyTouchpadDevice() =
         inputManager.inputDeviceIds.any { deviceId ->
@@ -304,6 +325,7 @@ class DesktopDisplayModeController(
         if (DesktopExperienceFlags.FORM_FACTOR_BASED_DESKTOP_FIRST_SWITCH.isTrue) {
             pw.println("hasAnyTouchpadDevice=" + hasAnyTouchpadDevice())
             pw.println("hasAnyPhysicalKeyboardDevice=" + hasAnyPhysicalKeyboardDevice())
+            pw.println("isDesktopModeOnKeyboardEnabled=" + isDesktopModeOnKeyboardEnabled())
         }
 
         pw.println("Current Desktop Display Modes:")
@@ -316,5 +338,8 @@ class DesktopDisplayModeController(
 
     companion object {
         private const val TAG = "DesktopDisplayModeController"
+
+        // Settings.Secure key of the device settings that opts into desktop-first on a keyboard
+        private const val DESKTOP_MODE_ON_KEYBOARD = "desktop_mode_on_keyboard"
     }
 }
