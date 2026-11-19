@@ -2486,6 +2486,18 @@ public class InputManagerService extends IInputManager.Stub
         synchronized (mInputDevicesLock) {
             devices = mInputDevices;
         }
+        // Keyboards with a touchpad or mouse keys can expose the pointer as its own input
+        // device, so a pointer that shares its Bluetooth address with a keyboard is real.
+        final ArraySet<String> keyboardAddresses = new ArraySet<>();
+        for (InputDevice device : devices) {
+            if (device.getKeyboardType() != InputDevice.KEYBOARD_TYPE_ALPHABETIC) {
+                continue;
+            }
+            final String btAddress = mNative.getBluetoothAddress(device.getId());
+            if (btAddress != null) {
+                keyboardAddresses.add(btAddress);
+            }
+        }
         final IntArray reenable = new IntArray();
         synchronized (mInputDevicesLock) {
             for (int i = mSuppressedBluetoothPointers.size() - 1; i >= 0; i--) {
@@ -2499,7 +2511,8 @@ public class InputManagerService extends IInputManager.Stub
                 }
                 if (tracked == null) {
                     mSuppressedBluetoothPointers.removeAt(i);
-                } else if (!isPointerOnly(tracked)) {
+                } else if (!isPointerOnly(tracked) || keyboardAddresses.contains(
+                        mNative.getBluetoothAddress(trackedId))) {
                     // Composite devices like styluses register their mouse node first and their
                     // keyboard or stylus nodes into the same device right after, so the device
                     // was only a pointer when it got suppressed.
@@ -2517,7 +2530,7 @@ public class InputManagerService extends IInputManager.Stub
                 continue;
             }
             final String btAddress = mNative.getBluetoothAddress(id);
-            if (btAddress == null) {
+            if (btAddress == null || keyboardAddresses.contains(btAddress)) {
                 continue;
             }
             if (isLikelyRealBluetoothPointer(btAddress)) {
