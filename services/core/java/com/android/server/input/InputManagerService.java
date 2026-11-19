@@ -2565,8 +2565,11 @@ public class InputManagerService extends IInputManager.Stub
                 return true;
             }
             final int deviceClass = btClass.getDeviceClass();
-            return (deviceClass & BluetoothClass.Device.PERIPHERAL_POINTING)
-                    == BluetoothClass.Device.PERIPHERAL_POINTING;
+            // The stack maps the generic HID appearance of Bluetooth LE mice to a peripheral
+            // without a subtype. Phantom pointers from bikes and bands report other classes.
+            return deviceClass == BluetoothClass.Device.PERIPHERAL_NON_KEYBOARD_NON_POINTING
+                    || (deviceClass & BluetoothClass.Device.PERIPHERAL_POINTING)
+                            == BluetoothClass.Device.PERIPHERAL_POINTING;
         } catch (IllegalArgumentException e) {
             return true;
         }
