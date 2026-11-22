@@ -28,6 +28,8 @@ import android.hardware.usb.UsbManager
 import android.media.AudioManager
 import android.media.MediaMetadata
 import android.media.session.PlaybackState
+import android.net.wifi.WifiInfo
+import android.net.wifi.WifiManager
 import android.nfc.NfcAdapter
 import android.os.Bundle
 import android.os.RemoteException
@@ -51,7 +53,6 @@ import com.android.systemui.plugins.statusbar.StatusBarStateController
 import com.android.systemui.quicklook.QuickLookClient
 import com.android.systemui.screenrecord.ScreenRecordUxController
 import com.android.systemui.statusbar.StatusBarState
-import com.android.systemui.statusbar.connectivity.AccessPointController
 import com.android.systemui.statusbar.connectivity.MobileDataIndicators
 import com.android.systemui.statusbar.connectivity.NetworkController
 import com.android.systemui.statusbar.connectivity.SignalCallback
@@ -73,7 +74,6 @@ import com.android.systemui.statusbar.policy.CastController
 import com.android.systemui.statusbar.policy.CastDevice
 import com.android.systemui.statusbar.policy.SecurityController
 import com.android.systemui.statusbar.policy.ZenModeController
-import com.android.wifitrackerlib.WifiEntry
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.BufferOverflow
@@ -100,7 +100,6 @@ class AxPlatformObservers @Inject constructor(
     private val stateManager: AxPlatformStateManager,
     private val featureController: AxPlatformFeatureController,
     private val networkController: NetworkController,
-    private val accessPointController: AccessPointController,
     private val bluetoothController: BluetoothController,
     private val hotspotController: HotspotController,
     private val flashlightController: FlashlightController,
@@ -132,6 +131,7 @@ class AxPlatformObservers @Inject constructor(
     private var lastMobileDataEnabled: Boolean? = null
     private val audioManager: AudioManager? = context.getSystemService(AudioManager::class.java)
     private val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+    private val wifiManager: WifiManager? = context.getSystemService(WifiManager::class.java)
 
     private val wifiStateFlow = MutableSharedFlow<Bundle>(
         replay = 0, extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST
@@ -144,6 +144,7 @@ class AxPlatformObservers @Inject constructor(
         scope.launch(bgDispatcher) {
             wifiStateFlow.collect { bundle ->
                 stateManager.broadcastState(AxPlatformFeature.WIFI, bundle)
+                broadcastConnectedWifi(bundle.getBoolean("connected"), bundle.getString("ssid"))
             }
         }
         scope.launch(bgDispatcher) {
@@ -190,7 +191,6 @@ class AxPlatformObservers @Inject constructor(
         configurationController.addCallback(configurationListener)
         statusBarStateController.addCallback(dozeCallback)
         keyguardStateController.addCallback(keyguardCallback)
-        accessPointController.addAccessPointCallback(accessPointCallback)
         securityController.addCallback(vpnCallback)
         castController.addCallback(castCallback)
     }
@@ -454,30 +454,24 @@ class AxPlatformObservers @Inject constructor(
         }
     }
 
-    private val accessPointCallback = object : AccessPointController.AccessPointCallback {
-        override fun onAccessPointsChanged(accessPoints: List<WifiEntry>) {
-            featureController.latestAccessPoints = accessPoints.toList()
-            val networks = ArrayList<Bundle>()
-            accessPoints.forEach { ap ->
-                if (ap.getLevel() != -1) {
-                    networks.add(Bundle().apply {
-                        putString("title", ap.getTitle())
-                        putString("key", ap.getKey())
-                        putBoolean("isConnected",
-                            ap.getConnectedState() == WifiEntry.CONNECTED_STATE_CONNECTED)
-                        putBoolean("isSaved", ap.isSaved())
-                        putInt("level", ap.getLevel())
-                        putInt("security", ap.getSecurity())
-                    })
-                }
-            }
-            stateManager.broadcastState(AxPlatformClient.KEY_WIFI_SCAN, Bundle().apply {
-                putParcelableArrayList("networks", networks)
+    // Report the connected network in the wifi_scan shape PC mode reads. Take it from the
+    // current connection: WifiPickerTracker would scan every 10 s for as long as a callback
+    // stays registered, which adds ping spikes even in fullscreen games.
+    private fun broadcastConnectedWifi(connected: Boolean, ssid: String?) {
+        val wm = wifiManager
+        val info = if (connected) wm?.connectionInfo else null
+        val networks = ArrayList<Bundle>()
+        if (wm != null && info != null && info.rssi != WifiInfo.INVALID_RSSI) {
+            networks.add(Bundle().apply {
+                putString("title", ssid ?: "")
+                putBoolean("isConnected", true)
+                putBoolean("isSaved", true)
+                putInt("level", wm.calculateSignalLevel(info.rssi))
             })
         }
-
-        override fun onSettingsActivityTriggered(intent: Intent?) {}
-        override fun onWifiScan(isScan: Boolean) {}
+        stateManager.broadcastState(AxPlatformClient.KEY_WIFI_SCAN, Bundle().apply {
+            putParcelableArrayList("networks", networks)
+        })
     }
 
     private fun getAllBluetoothDevices() = featureController.getAllBluetoothDevices()
