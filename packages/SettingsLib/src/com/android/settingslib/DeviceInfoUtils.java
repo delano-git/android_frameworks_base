@@ -52,6 +52,7 @@ public class DeviceInfoUtils {
     private static final String TAG = "DeviceInfoUtils";
 
     private static final String FILENAME_MSV = "/sys/board_properties/soc/msv";
+    private static final String FILENAME_PROC_VERSION = "/proc/version";
 
     /**
      * Reads a line from the specified file.
@@ -69,7 +70,67 @@ public class DeviceInfoUtils {
     }
 
     public static String getFormattedKernelVersion(Context context) {
-            return formatKernelVersion(context, Os.uname());
+        String procVersion = null;
+        try {
+            procVersion = readLine(FILENAME_PROC_VERSION);
+        } catch (IOException e) {
+            Log.w(TAG, "Unable to read " + FILENAME_PROC_VERSION, e);
+        }
+        return formatKernelVersion(context, Os.uname(), procVersion);
+    }
+
+    @VisibleForTesting
+    static String formatKernelVersion(Context context, StructUtsname uname,
+            @Nullable String procVersion) {
+        final String version = formatKernelVersion(context, uname);
+        final String compiler = formatKernelCompiler(procVersion);
+        if (compiler == null
+                || version.equals(context.getString(R.string.status_unavailable))) {
+            return version;
+        }
+        return version + "\n" + compiler;
+    }
+
+    /**
+     * Returns the compiler and linker the kernel was built with, taken from /proc/version,
+     * for example "Clang 21.0.0 (r563880c), LLD 21.0.0", or null if neither is found.
+     */
+    @VisibleForTesting
+    @Nullable
+    static String formatKernelCompiler(@Nullable String procVersion) {
+        if (TextUtils.isEmpty(procVersion)) {
+            return null;
+        }
+        String compiler = null;
+        Matcher m = Pattern.compile("clang version (\\d+(?:\\.\\d+)*)").matcher(procVersion);
+        if (m.find()) {
+            compiler = "Clang " + m.group(1);
+            final Matcher r = Pattern.compile("based on (r\\d+[a-z]*)").matcher(procVersion);
+            if (r.find()) {
+                compiler += " (" + r.group(1) + ")";
+            }
+        } else {
+            m = Pattern.compile("gcc (?:version )?(?:\\([^)]*\\) )?(\\d+(?:\\.\\d+)+)")
+                    .matcher(procVersion);
+            if (m.find()) {
+                compiler = "GCC " + m.group(1);
+            }
+        }
+        String linker = null;
+        m = Pattern.compile("LLD (\\d+(?:\\.\\d+)*)").matcher(procVersion);
+        if (m.find()) {
+            linker = "LLD " + m.group(1);
+        } else {
+            m = Pattern.compile("GNU ld (?:\\([^)]*\\) )?(\\d+(?:\\.\\d+)+)")
+                    .matcher(procVersion);
+            if (m.find()) {
+                linker = "GNU ld " + m.group(1);
+            }
+        }
+        if (compiler == null) {
+            return linker;
+        }
+        return linker == null ? compiler : compiler + ", " + linker;
     }
 
     @VisibleForTesting
