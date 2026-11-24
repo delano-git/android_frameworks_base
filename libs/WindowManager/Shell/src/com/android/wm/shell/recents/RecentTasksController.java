@@ -794,7 +794,7 @@ public class RecentTasksController implements TaskStackListenerCallback,
             //          above), add them to the end of the final list (the actual order doesn't
             //          matter for Overview)
             for (var desk : mTmpDesks.values()) {
-                if (!desk.mHasVisibleTasks && (desk.hasTasks() || shouldIncludeEmptyDesktops)) {
+                if (!desk.mHasVisibleTasks && shouldShowDesk(desk, shouldIncludeEmptyDesktops)) {
                     groupedTasks.add(desk.createDeskTaskInfo());
                 }
             }
@@ -802,13 +802,32 @@ public class RecentTasksController implements TaskStackListenerCallback,
         } else {
             // Add the desktop tasks at the end of the list
             for (var desk : mTmpDesks.values()) {
-                if (desk.hasTasks() || shouldIncludeEmptyDesktops) {
+                if (shouldShowDesk(desk, shouldIncludeEmptyDesktops)) {
                     groupedTasks.add(desk.createDeskTaskInfo());
                 }
             }
         }
 
         return groupedTasks;
+    }
+
+    /**
+     * Whether {@code desk} gets an entry in the list. A desk with tasks always does. An empty desk
+     * only does while it is the active desk of its display, so that an empty desktop the user is in
+     * can still be reached from Overview. Other empty desks, such as the default desk created at
+     * boot and the desks restored from persistence after a reboot or a SystemUI restart, would
+     * otherwise show up as a blank "Desktop" card.
+     */
+    private boolean shouldShowDesk(Desk desk, boolean includeEmptyDesktops) {
+        if (desk.hasTasks()) {
+            return true;
+        }
+        if (!includeEmptyDesktops || mDesktopUserRepositories.isEmpty()) {
+            return false;
+        }
+        final Integer activeDeskId =
+                mDesktopUserRepositories.get().getCurrent().getActiveDeskId(desk.mDisplayId);
+        return activeDeskId != null && activeDeskId == desk.mDeskId;
     }
 
     /**

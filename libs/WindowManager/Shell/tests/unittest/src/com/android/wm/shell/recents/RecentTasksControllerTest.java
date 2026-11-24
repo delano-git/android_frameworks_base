@@ -878,29 +878,39 @@ public class RecentTasksControllerTest extends ShellTestCase {
     @Test
     @EnableFlags({Flags.FLAG_ENABLE_MULTIPLE_DESKTOPS_BACKEND,
             Flags.FLAG_ENABLE_MULTIPLE_DESKTOPS_FRONTEND})
-    public void generateList_emptyTaskList_multipleDesktopsEnabled_shouldIncludeEmptyDesks() {
+    public void generateList_emptyTaskList_multipleDesktopsEnabled_includesActiveEmptyDesk() {
         mDesktopState.setEnableMultipleDesktops(true);
         Set<Integer> deskIds = Set.of(101, 102);
         when(mDesktopUserRepositories.getCurrent().getAllDeskIds()).thenReturn(deskIds);
+        when(mDesktopUserRepositories.getCurrent().getActiveDeskId(anyInt())).thenReturn(101);
 
         ArrayList<GroupedTaskInfo> groupedTasks =
                 mRecentTasksControllerReal.generateList(List.of(),
                         "test_empty_desks");
 
-        // Verification: Should return GroupedTaskInfo for each empty desk
-        assertEquals("Expected number of desks not matching", deskIds.size(), groupedTasks.size());
+        // Verification: only the active empty desk is listed
+        assertEquals("Expected only the active empty desk", 1, groupedTasks.size());
+        GroupedTaskInfo deskTaskInfo = groupedTasks.get(0);
+        assertTrue("Task info should be of type DESK", deskTaskInfo.isBaseType(TYPE_DESK));
+        assertTrue("Desk should be empty", deskTaskInfo.getTaskInfoList().isEmpty());
+        assertEquals("Expected the active desk", 101, deskTaskInfo.getDeskId());
+    }
 
-        List<Integer> actualDeskIdsInGroupedTasks = new ArrayList<>();
-        for (GroupedTaskInfo deskTaskInfo : groupedTasks) {
-            assertTrue("Task info should be of type DESK", deskTaskInfo.isBaseType(TYPE_DESK));
-            assertTrue("Desk should be empty", deskTaskInfo.getTaskInfoList().isEmpty());
-            actualDeskIdsInGroupedTasks.add(deskTaskInfo.getDeskId());
-        }
-        // Verify that the set of expected desk IDs matches the collected list of actual desk IDs
-        assertEquals("Desk ID list size does not match expected set size",
-                deskIds.size(), actualDeskIdsInGroupedTasks.size());
-        assertTrue("Actual desk IDs do not match expected desk IDs",
-                deskIds.containsAll(actualDeskIdsInGroupedTasks));
+    @Test
+    @EnableFlags({Flags.FLAG_ENABLE_MULTIPLE_DESKTOPS_BACKEND,
+            Flags.FLAG_ENABLE_MULTIPLE_DESKTOPS_FRONTEND})
+    public void generateList_emptyTaskList_multipleDesktopsEnabled_hidesInactiveEmptyDesks() {
+        mDesktopState.setEnableMultipleDesktops(true);
+        when(mDesktopUserRepositories.getCurrent().getAllDeskIds()).thenReturn(Set.of(101, 102));
+        when(mDesktopUserRepositories.getCurrent().getActiveDeskId(anyInt())).thenReturn(null);
+
+        ArrayList<GroupedTaskInfo> groupedTasks =
+                mRecentTasksControllerReal.generateList(List.of(),
+                        "test_inactive_empty_desks");
+
+        // Verification: empty desks that aren't active don't show up as blank cards
+        assertTrue("Expected no desks when none is active and all are empty",
+                groupedTasks.isEmpty());
     }
 
     @Test
